@@ -1,0 +1,237 @@
+---
+title: "Tiny Project - COVID-19 Health Statistics Analysis"
+author: "Tanmay Gupta"
+date: "2026-09-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This report analyzes the spread of COVID-19 across Indian states using daily
+reported data on confirmed cases, cured patients, and deaths. The dataset used
+is `covid_19_india.csv`, sourced from Kaggle.
+
+---
+
+## 1. Data Importing
+
+```{r}
+# Read the CSV file into R (must be in the same folder as this .Rmd file)
+covid_data <- read.csv("covid_19_india.csv")
+
+# Preview the first few rows
+head(covid_data)
+```
+
+**Explanation:** `read.csv()` loads the dataset into a data frame called
+`covid_data`. `head()` shows the first 6 rows so we can confirm it loaded
+correctly.
+
+---
+
+## 2. Data Structure and Overview
+
+```{r}
+str(covid_data)
+```
+
+```{r}
+summary(covid_data)
+```
+
+**Explanation:** `str()` shows the data type of each column (text, number,
+etc.). `summary()` gives quick statistics (min, max, average) for numeric
+columns like Confirmed, Cured, and Deaths.
+
+---
+
+## 3. Data Preprocessing and Cleaning
+
+```{r}
+# Check for missing values in each column
+colSums(is.na(covid_data))
+```
+
+```{r}
+# Convert Date column from text to proper Date format
+covid_data$Date <- as.Date(covid_data$Date, format = "%Y-%m-%d")
+
+# Confirm conversion worked
+class(covid_data$Date)
+```
+
+```{r}
+# Check for duplicate rows
+sum(duplicated(covid_data))
+```
+
+**Explanation:** `colSums(is.na(...))` counts missing values per column.
+Converting `Date` to a proper date type lets R understand chronological order
+(needed for the trend chart later). We also check for duplicate rows to
+ensure data quality.
+
+**Important note on this dataset:** each row stores a *cumulative running
+total* for a state as of that date (not new daily cases). This means we must
+NOT simply add up every row later — that would multiply the same growing
+numbers across ~500 days and give impossible totals. Instead, for any
+"grand total," we will use only the **most recent date's** rows, since those
+already represent the final cumulative count for each state.
+
+---
+
+## 4. Data Analysis and Statistical Exploration
+
+```{r}
+# Isolate only the most recent date's data (correct final totals per state)
+latest_date <- max(covid_data$Date)
+latest_data <- covid_data[covid_data$Date == latest_date, ]
+
+latest_date
+```
+
+```{r}
+# Overall totals across India (as of the latest date)
+total_confirmed <- sum(latest_data$Confirmed)
+total_cured <- sum(latest_data$Cured)
+total_deaths <- sum(latest_data$Deaths)
+
+total_confirmed
+total_cured
+total_deaths
+```
+
+```{r}
+# Which states have the highest confirmed cases (as of latest date)?
+state_totals <- latest_data[order(-latest_data$Confirmed),
+                             c("State.UnionTerritory", "Confirmed")]
+head(state_totals, 10)
+```
+
+```{r}
+# Central tendency and spread of confirmed cases across states (latest date)
+median(latest_data$Confirmed)
+var(latest_data$Confirmed)
+sd(latest_data$Confirmed)
+```
+
+```{r}
+# Frequency count: number of days each state has reported data
+state_freq <- table(covid_data$State.UnionTerritory)
+head(state_freq)
+```
+
+```{r}
+# Correlation between Confirmed cases and Deaths (using full daily data)
+cor(covid_data$Confirmed, covid_data$Deaths)
+```
+
+```{r}
+# Correlation between Confirmed cases and Cured (using full daily data)
+cor(covid_data$Confirmed, covid_data$Cured)
+```
+
+**Explanation:** We use `latest_data` (a single date's snapshot) for grand
+totals and state rankings, since the data is cumulative. `median()`, `var()`,
+and `sd()` show how spread out the case counts are across states — a large
+standard deviation means some states had far more cases than others.
+`table()` counts how many days of data exist per state, useful for checking
+data completeness. For correlation, using the full daily dataset is fine and
+standard practice, because correlation measures the *relationship* between
+two columns' growth pattern, not an absolute total.
+
+---
+
+## 5. Graphs and Plots
+
+```{r}
+# Bar chart: Top 10 states by confirmed cases
+top10 <- head(state_totals, 10)
+
+barplot(
+  top10$Confirmed,
+  names.arg = top10$State.UnionTerritory,
+  main = "Top 10 States by Confirmed COVID-19 Cases",
+  xlab = "State",
+  ylab = "Confirmed Cases",
+  las = 2,
+  col = "steelblue"
+)
+```
+
+```{r}
+# Pie chart: overall outcome split (Cured vs Deaths vs Active)
+active <- total_confirmed - total_cured - total_deaths
+
+outcome <- c(Cured = total_cured, Deaths = total_deaths, Active = active)
+
+pie(
+  outcome,
+  main = "Overall Case Outcome Distribution",
+  labels = paste(names(outcome), outcome)
+)
+```
+
+```{r}
+# Line trend: total confirmed cases over time (all states combined)
+daily_totals <- aggregate(Confirmed ~ Date, data = covid_data, sum)
+
+plot(
+  daily_totals$Date,
+  daily_totals$Confirmed,
+  type = "l",
+  main = "COVID-19 Confirmed Cases Over Time (All India)",
+  xlab = "Date",
+  ylab = "Total Confirmed Cases",
+  col = "darkred"
+)
+```
+
+```{r}
+# Scatter plot: Confirmed vs Deaths relationship
+plot(
+  covid_data$Confirmed,
+  covid_data$Deaths,
+  main = "Confirmed Cases vs Deaths",
+  xlab = "Confirmed Cases",
+  ylab = "Deaths",
+  pch = 19,
+  col = "darkgreen"
+)
+```
+
+**Explanation:** The bar chart highlights the worst-affected states as of
+the most recent date. The pie chart shows the overall proportion of
+patients cured, deceased, or still active. The line plot shows how the
+national case count grew over time. The scatter plot visualizes the
+relationship between case count and deaths across all states and dates.
+
+---
+
+## 6. Findings and Conclusion
+
+- The state of **Maharashtra** recorded the highest number of confirmed
+  cases (6,363,442), suggesting it was the most affected region in the
+  country, followed by Kerala and Karnataka.
+- The correlation between Confirmed cases and Deaths was **0.918**,
+  indicating a **strong** positive relationship — meaning states with more
+  cases generally also recorded proportionally more deaths.
+- The correlation between Confirmed cases and Cured was **0.998**, an
+  even **stronger** relationship, showing recoveries closely tracked the
+  rise in confirmed cases over time.
+- The trend line shows cases **rose sharply** in two distinct phases —
+  a steep climb during mid-to-late 2020, followed by an even sharper spike
+  in **April-May 2021**, reflecting India's second COVID-19 wave.
+- Overall, out of all confirmed cases (32,036,511 total), **97.45%** were
+  cured, and **1.34%** resulted in death, showing a **high** recovery rate.
+
+**Conclusion:** This analysis of India's COVID-19 data shows how the
+pandemic spread unevenly across states, with Maharashtra, Kerala, and
+Karnataka bearing a disproportionate share of cases. The strong correlation
+between cases and deaths/recoveries highlights the scale of the healthcare
+response required during the outbreak, while the high overall recovery rate
+of over 97% reflects the effectiveness of treatment and containment efforts
+over time.
